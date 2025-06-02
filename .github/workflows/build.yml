@@ -107,9 +107,8 @@ jobs:
           
           # Procura o arquivo UF2 em vários locais possíveis
           UF2_PATHS=(
-            "sofle_rev1_vial.uf2"
-            ".build/sofle_rev1_vial.uf2"
-            "qmk_firmware/.build/sofle_rev1_vial.uf2"
+            "sofle_rev1_vial_promicro_rp2040.uf2"
+            ".build/sofle_rev1_vial_promicro_rp2040.uf2"
           )
           
           UF2_FILE=""
@@ -126,8 +125,6 @@ jobs:
             ls -lh "$UF2_FILE"
             echo "uf2_exists=true" >> $GITHUB_OUTPUT
             echo "uf2_path=$UF2_FILE" >> $GITHUB_OUTPUT
-            # Copia o arquivo para um local conhecido
-            cp "$UF2_FILE" "./sofle_rev1_vial.uf2"
           else
             echo "❌ Arquivo UF2 não encontrado"
             echo "📁 Conteúdo do diretório atual:"
@@ -142,7 +139,7 @@ jobs:
         if: steps.check_files.outputs.uf2_exists == 'true'
         with:
           name: sofle-vial-firmware-uf2-rp2040
-          path: ${{ github.workspace }}/vial-qmk/sofle_rev1_vial.uf2
+          path: ${{ github.workspace }}/vial-qmk/${{ steps.check_files.outputs.uf2_path }}
           if-no-files-found: error
   create-release:
     runs-on: ubuntu-latest
