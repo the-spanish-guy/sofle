@@ -94,8 +94,12 @@ jobs:
       - name: Check for UF2 file
         id: check_files
         run: |
-          if [ -f "${{ github.workspace }}/vial-qmk/sofle_rev1_vial.uf2" ]; then
+          cd ${{ github.workspace }}/vial-qmk
+          echo "Procurando arquivo .uf2..."
+          find . -name "*.uf2" -type f -exec ls -l {} \;
+          if [ -f "sofle_rev1_vial.uf2" ]; then
             echo "uf2_exists=true" >> $GITHUB_OUTPUT
+            echo "uf2_path=sofle_rev1_vial.uf2" >> $GITHUB_OUTPUT
           else
             echo "uf2_exists=false" >> $GITHUB_OUTPUT
           fi
@@ -114,20 +118,27 @@ jobs:
       github.event_name == 'push' && 
       (success() || failure())
     steps:
+      - name: Create release directories
+        run: |
+          mkdir -p ./firmware-files
       - name: Download HEX artifact
         uses: actions/download-artifact@v4
         if: needs.build-hex.result == 'success'
         continue-on-error: true
         with:
           name: sofle-vial-firmware-hex
-          path: ./hex-files
+          path: ./firmware-files
       - name: Download UF2 artifact
         uses: actions/download-artifact@v4
         if: needs.build-uf2.result == 'success'
         continue-on-error: true
         with:
           name: sofle-vial-firmware-uf2-rp2040
-          path: ./uf2-files
+          path: ./firmware-files
+      - name: List files for release
+        run: |
+          echo "Arquivos para release:"
+          ls -R ./firmware-files/
       - name: Generate release notes
         id: release_notes
         run: |
@@ -173,8 +184,7 @@ jobs:
           name: Build ${{ github.run_number }}
           body: ${{ env.RELEASE_BODY }}
           files: |
-            ./hex-files/*
-            ./uf2-files/*
+            ./firmware-files/*
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
