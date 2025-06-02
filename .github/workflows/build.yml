@@ -91,31 +91,49 @@ jobs:
         run: |
           cd ${{ github.workspace }}/vial-qmk
           echo "🔍 Compilando firmware UF2..."
-          qmk compile -kb sofle/rev1 -km vial -e CONVERT_TO=promicro_rp2040
+          make sofle/rev1:vial CONVERT_TO=promicro_rp2040
           echo "✅ Compilação concluída"
           
           echo "📁 Conteúdo do diretório atual:"
           ls -la
           
           echo "🔎 Procurando arquivos .uf2 recursivamente:"
-          find . -name "*.uf2" -type f
+          find . -name "*.uf2" -type f -exec realpath {} \;
       - name: Check for UF2 file
         id: check_files
         run: |
           cd ${{ github.workspace }}/vial-qmk
           echo "🔍 Verificando arquivo UF2..."
           
-          UF2_FILE="sofle_rev1_vial.uf2"
-          if [ -f "$UF2_FILE" ]; then
-            echo "✅ Arquivo $UF2_FILE encontrado"
+          # Procura o arquivo UF2 em vários locais possíveis
+          UF2_PATHS=(
+            "sofle_rev1_vial.uf2"
+            ".build/sofle_rev1_vial.uf2"
+            "qmk_firmware/.build/sofle_rev1_vial.uf2"
+          )
+          
+          UF2_FILE=""
+          for path in "${UF2_PATHS[@]}"; do
+            if [ -f "$path" ]; then
+              echo "✅ Arquivo encontrado em: $path"
+              UF2_FILE="$path"
+              break
+            fi
+          done
+          
+          if [ -n "$UF2_FILE" ]; then
             echo "📊 Detalhes do arquivo:"
             ls -lh "$UF2_FILE"
             echo "uf2_exists=true" >> $GITHUB_OUTPUT
             echo "uf2_path=$UF2_FILE" >> $GITHUB_OUTPUT
+            # Copia o arquivo para um local conhecido
+            cp "$UF2_FILE" "./sofle_rev1_vial.uf2"
           else
-            echo "❌ Arquivo $UF2_FILE não encontrado"
-            echo "📁 Conteúdo do diretório:"
+            echo "❌ Arquivo UF2 não encontrado"
+            echo "📁 Conteúdo do diretório atual:"
             ls -la
+            echo "📁 Conteúdo do diretório .build (se existir):"
+            ls -la .build/ 2>/dev/null || echo "Diretório .build não existe"
             echo "uf2_exists=false" >> $GITHUB_OUTPUT
             exit 1
           fi
