@@ -1,0 +1,206 @@
+name: Build QMK Firmware
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "keyboards/**"
+      - ".github/workflows/**"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "keyboards/**"
+  workflow_dispatch:
+jobs:
+  build-hex:
+    runs-on: ubuntu-latest
+    name: Build HEX firmware
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - name: Install Vial-QMK CLI
+        run: |
+          python3 -m pip install qmk
+      - name: Clone Vial-QMK
+        run: |
+          git clone https://github.com/vial-kb/vial-qmk.git ${{ github.workspace }}/vial-qmk
+      - name: Setup Vial-QMK
+        run: |
+          cd ${{ github.workspace }}/vial-qmk
+          make git-submodule
+          util/qmk_install.sh
+      - name: Copy keyboard files to Vial-QMK
+        run: |
+          cp -r keyboards/sofle ${{ github.workspace }}/vial-qmk/keyboards/
+      - name: List available keymaps
+        run: |
+          ls -la ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/
+      - name: Compile HEX firmware
+        run: |
+          cd ${{ github.workspace }}/vial-qmk
+          make sofle:vial
+      - name: Upload HEX firmware
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: sofle-vial-firmware-hex
+          path: ${{ github.workspace }}/vial-qmk/*.hex
+  build-uf2:
+    runs-on: ubuntu-latest
+    name: Build UF2 firmware (RP2040)
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - name: Install Vial-QMK CLI
+        run: |
+          python3 -m pip install qmk
+      - name: Clone Vial-QMK
+        run: |
+          git clone https://github.com/vial-kb/vial-qmk.git ${{ github.workspace }}/vial-qmk
+      - name: Setup Vial-QMK
+        run: |
+          cd ${{ github.workspace }}/vial-qmk
+          make git-submodule
+          util/qmk_install.sh
+      - name: Copy keyboard files to Vial-QMK
+        run: |
+          cp -r keyboards/sofle ${{ github.workspace }}/vial-qmk/keyboards/
+      - name: Create RP2040 keymap with extra features
+        run: |
+          cd ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps
+          cp -r vial vial-rp2040
+      - name: Configure RP2040 keymap for more memory
+        run: |
+          cd ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/vial-rp2040
+
+          # Backup original rules.mk
+          cp rules.mk rules.mk.backup
+
+          # Add RP2040 specific settings
+          cat >> rules.mk << 'EOF'
+
+          # RP2040 specific - more memory available
+          CONVERT_TO = rp2040_ce
+          VIAL_INSECURE = yes
+
+          # Enable more features for RP2040
+          MOUSEKEY_ENABLE = yes
+          EXTRAKEY_ENABLE = yes
+          CONSOLE_ENABLE = yes
+          COMMAND_ENABLE = yes
+          NKRO_ENABLE = yes
+          AUDIO_ENABLE = no
+          UNICODE_ENABLE = yes
+          BACKLIGHT_ENABLE = no
+          RGBLIGHT_ENABLE = yes
+          RGB_MATRIX_ENABLE = no
+
+          # Vial features - more aggressive for RP2040
+          VIAL_TAP_DANCE_ENTRIES = 32
+          VIAL_COMBO_ENTRIES = 32
+          VIAL_KEY_OVERRIDE_ENTRIES = 32
+          EOF
+      - name: Configure RP2040 config.h for more features
+        run: |
+          cd ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/vial-rp2040
+
+          # Backup original config.h
+          cp config.h config.h.backup
+
+          # Add RP2040 specific config
+          cat >> config.h << 'EOF'
+
+          // RP2040 specific - more memory available
+          #undef VIAL_TAP_DANCE_ENTRIES
+          #define VIAL_TAP_DANCE_ENTRIES 32
+
+          #undef VIAL_COMBO_ENTRIES
+          #define VIAL_COMBO_ENTRIES 32
+
+          #undef VIAL_KEY_OVERRIDE_ENTRIES
+          #define VIAL_KEY_OVERRIDE_ENTRIES 32
+
+          // More aggressive settings for RP2040
+          #define TAPPING_TERM 180
+          #define TAPPING_TERM_PER_KEY
+          #define PERMISSIVE_HOLD_PER_KEY
+          #define QUICK_TAP_TERM 0
+
+          // Unicode support
+          #define UNICODE_SELECTED_MODES UNICODE_MODE_LINUX
+
+          // More combos and sequences
+          #define COMBO_COUNT 16
+          #define COMBO_TERM 50
+          EOF
+      - name: List RP2040 keymap
+        run: |
+          ls -la ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/
+      - name: Compile UF2 firmware for RP2040
+        run: |
+          cd ${{ github.workspace }}/vial-qmk
+          make sofle:vial-rp2040
+      - name: Upload UF2 firmware
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: sofle-vial-firmware-uf2-rp2040
+          path: ${{ github.workspace }}/vial-qmk/*.uf2
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [build-hex, build-uf2]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Download HEX artifact
+        uses: actions/download-artifact@v3
+        continue-on-error: true
+        with:
+          name: sofle-vial-firmware-hex
+          path: ./hex-files
+      - name: Download UF2 artifact
+        uses: actions/download-artifact@v3
+        continue-on-error: true
+        with:
+          name: sofle-vial-firmware-uf2-rp2040
+          path: ./uf2-files
+      - name: List all files
+        run: |
+          echo "HEX files:"
+          ls -la ./hex-files/ || echo "No HEX files found"
+          echo "UF2 files:"
+          ls -la ./uf2-files/ || echo "No UF2 files found"
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          body: |
+            Firmware builds for Sofle V2.1
+
+            ## Files:
+            - `*.hex` - For Pro Micro and compatible controllers
+            - `*.uf2` - For RP2040 controllers (16MB, more features enabled)
+
+            ## RP2040 Version Features:
+            - More Vial entries (32 tap dance, 32 combos, 32 key overrides)
+            - Unicode support enabled
+            - Enhanced tapping configuration
+            - Console and command support
+            - All standard Vial features
+
+            Flash the appropriate file for your controller type.
+          files: |
+            ./hex-files/*
+            ./uf2-files/*
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
