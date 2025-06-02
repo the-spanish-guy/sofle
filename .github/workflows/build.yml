@@ -20,7 +20,6 @@ jobs:
   build-hex:
     runs-on: ubuntu-latest
     name: Build HEX firmware
-    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -67,7 +66,6 @@ jobs:
   build-uf2:
     runs-on: ubuntu-latest
     name: Build UF2 firmware (RP2040)
-    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -111,47 +109,69 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     needs: [build-hex, build-uf2]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: |
+      github.ref == 'refs/heads/main' && 
+      github.event_name == 'push' && 
+      (success() || failure())
     steps:
       - name: Download HEX artifact
         uses: actions/download-artifact@v4
+        if: needs.build-hex.result == 'success'
         continue-on-error: true
         with:
           name: sofle-vial-firmware-hex
           path: ./hex-files
       - name: Download UF2 artifact
         uses: actions/download-artifact@v4
+        if: needs.build-uf2.result == 'success'
         continue-on-error: true
         with:
           name: sofle-vial-firmware-uf2-rp2040
           path: ./uf2-files
-      - name: List all files
+      - name: Generate release notes
+        id: release_notes
         run: |
-          echo "HEX files:"
-          ls -la ./hex-files/ || echo "No HEX files found"
-          echo "UF2 files:"
-          ls -la ./uf2-files/ || echo "No UF2 files found"
+          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+          echo "Firmware builds for Sofle V2.1" >> $GITHUB_ENV
+          echo "" >> $GITHUB_ENV
+          echo "## Status" >> $GITHUB_ENV
+          if [[ "${{ needs.build-hex.result }}" == "success" ]]; then
+            echo "✅ Pro Micro (.hex) build: Sucesso" >> $GITHUB_ENV
+          else
+            echo "❌ Pro Micro (.hex) build: Falhou" >> $GITHUB_ENV
+          fi
+          if [[ "${{ needs.build-uf2.result }}" == "success" ]]; then
+            echo "✅ RP2040 (.uf2) build: Sucesso" >> $GITHUB_ENV
+          else
+            echo "❌ RP2040 (.uf2) build: Falhou" >> $GITHUB_ENV
+          fi
+          echo "" >> $GITHUB_ENV
+          echo "## Files:" >> $GITHUB_ENV
+          if [[ "${{ needs.build-hex.result }}" == "success" ]]; then
+            echo "- \`*.hex\` - Para Pro Micro e controladores compatíveis" >> $GITHUB_ENV
+          fi
+          if [[ "${{ needs.build-uf2.result }}" == "success" ]]; then
+            echo "- \`*.uf2\` - Para controladores RP2040 (16MB, mais recursos habilitados)" >> $GITHUB_ENV
+          fi
+          echo "" >> $GITHUB_ENV
+          if [[ "${{ needs.build-uf2.result }}" == "success" ]]; then
+            echo "## Recursos da versão RP2040:" >> $GITHUB_ENV
+            echo "- Mais entradas Vial (32 tap dance, 32 combos, 32 key overrides)" >> $GITHUB_ENV
+            echo "- Suporte a Unicode habilitado" >> $GITHUB_ENV
+            echo "- Configuração de tapping aprimorada" >> $GITHUB_ENV
+            echo "- Suporte a console e comandos" >> $GITHUB_ENV
+            echo "- Todos os recursos padrão do Vial" >> $GITHUB_ENV
+          fi
+          echo "EOF" >> $GITHUB_ENV
       - name: Create Release
         uses: softprops/action-gh-release@v1
-        if: success()
+        if: |
+          needs.build-hex.result == 'success' || 
+          needs.build-uf2.result == 'success'
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
-          body: |
-            Firmware builds for Sofle V2.1
-
-            ## Files:
-            - `*.hex` - For Pro Micro and compatible controllers
-            - `*.uf2` - For RP2040 controllers (16MB, more features enabled)
-
-            ## RP2040 Version Features:
-            - More Vial entries (32 tap dance, 32 combos, 32 key overrides)
-            - Unicode support enabled
-            - Enhanced tapping configuration
-            - Console and command support
-            - All standard Vial features
-
-            Flash the appropriate file for your controller type.
+          body: ${{ env.RELEASE_BODY }}
           files: |
             ./hex-files/*
             ./uf2-files/*
