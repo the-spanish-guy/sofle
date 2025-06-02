@@ -232,5 +232,11 @@ jobs:
           files: |
             ./firmware-files/*
           generate_release_notes: false
+          draft: false
+          prerelease: false
+          # Não gera arquivos fonte automaticamente
+          make_latest: true
+          skip_sourcemap: true
+          omit_body: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
