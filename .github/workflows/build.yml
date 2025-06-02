@@ -90,18 +90,34 @@ jobs:
       - name: Compile UF2 firmware for RP2040
         run: |
           cd ${{ github.workspace }}/vial-qmk
+          echo "🔍 Compilando firmware UF2..."
           qmk compile -kb sofle/rev1 -km vial -e CONVERT_TO=promicro_rp2040
+          echo "✅ Compilação concluída"
+          
+          echo "📁 Conteúdo do diretório atual:"
+          ls -la
+          
+          echo "🔎 Procurando arquivos .uf2 recursivamente:"
+          find . -name "*.uf2" -type f
       - name: Check for UF2 file
         id: check_files
         run: |
           cd ${{ github.workspace }}/vial-qmk
-          echo "Procurando arquivo .uf2..."
-          find . -name "*.uf2" -type f -exec ls -l {} \;
-          if [ -f "sofle_rev1_vial.uf2" ]; then
+          echo "🔍 Verificando arquivo UF2..."
+          
+          UF2_FILE="sofle_rev1_vial.uf2"
+          if [ -f "$UF2_FILE" ]; then
+            echo "✅ Arquivo $UF2_FILE encontrado"
+            echo "📊 Detalhes do arquivo:"
+            ls -lh "$UF2_FILE"
             echo "uf2_exists=true" >> $GITHUB_OUTPUT
-            echo "uf2_path=sofle_rev1_vial.uf2" >> $GITHUB_OUTPUT
+            echo "uf2_path=$UF2_FILE" >> $GITHUB_OUTPUT
           else
+            echo "❌ Arquivo $UF2_FILE não encontrado"
+            echo "📁 Conteúdo do diretório:"
+            ls -la
             echo "uf2_exists=false" >> $GITHUB_OUTPUT
+            exit 1
           fi
       - name: Upload UF2 firmware
         uses: actions/upload-artifact@v4
@@ -136,9 +152,23 @@ jobs:
           name: sofle-vial-firmware-uf2-rp2040
           path: ./firmware-files
       - name: List files for release
+        id: check_release_files
         run: |
-          echo "Arquivos para release:"
-          ls -R ./firmware-files/
+          echo "📁 Verificando arquivos para release..."
+          
+          # Verifica se existem arquivos
+          FILE_COUNT=$(find ./firmware-files -type f | wc -l)
+          echo "📊 Quantidade de arquivos encontrados: $FILE_COUNT"
+          
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "❌ Nenhum arquivo encontrado para release"
+            echo "has_files=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "✅ Arquivos encontrados:"
+            ls -Rla ./firmware-files/
+            echo "has_files=true" >> $GITHUB_OUTPUT
+          fi
       - name: Generate release notes
         id: release_notes
         run: |
@@ -177,8 +207,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: |
-          needs.build-hex.result == 'success' || 
-          needs.build-uf2.result == 'success'
+          (needs.build-hex.result == 'success' || 
+          needs.build-uf2.result == 'success') &&
+          steps.check_release_files.outputs.has_files == 'true'
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
