@@ -10,6 +10,12 @@ on:
     paths:
       - "keyboards/**"
   workflow_dispatch:
+
+# Adiciona permissões necessárias
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build-hex:
     runs-on: ubuntu-latest
@@ -46,7 +52,7 @@ jobs:
       - name: Check for HEX file
         id: check_files
         run: |
-          if [ -f "${{ github.workspace }}/vial-qmk/*.hex" ]; then
+          if [ -f "${{ github.workspace }}/vial-qmk/sofle_rev1_vial.hex" ]; then
             echo "hex_exists=true" >> $GITHUB_OUTPUT
           else
             echo "hex_exists=false" >> $GITHUB_OUTPUT
@@ -56,7 +62,7 @@ jobs:
         if: steps.check_files.outputs.hex_exists == 'true'
         with:
           name: sofle-vial-firmware-hex
-          path: ${{ github.workspace }}/vial-qmk/*.hex
+          path: ${{ github.workspace }}/vial-qmk/sofle_rev1_vial.hex
           if-no-files-found: error
   build-uf2:
     runs-on: ubuntu-latest
@@ -90,7 +96,7 @@ jobs:
       - name: Check for UF2 file
         id: check_files
         run: |
-          if [ -f "${{ github.workspace }}/vial-qmk/*.uf2" ]; then
+          if [ -f "${{ github.workspace }}/vial-qmk/sofle_rev1_vial.uf2" ]; then
             echo "uf2_exists=true" >> $GITHUB_OUTPUT
           else
             echo "uf2_exists=false" >> $GITHUB_OUTPUT
@@ -100,7 +106,7 @@ jobs:
         if: steps.check_files.outputs.uf2_exists == 'true'
         with:
           name: sofle-vial-firmware-uf2-rp2040
-          path: ${{ github.workspace }}/vial-qmk/*.uf2
+          path: ${{ github.workspace }}/vial-qmk/sofle_rev1_vial.uf2
           if-no-files-found: error
   create-release:
     runs-on: ubuntu-latest
@@ -127,6 +133,7 @@ jobs:
           ls -la ./uf2-files/ || echo "No UF2 files found"
       - name: Create Release
         uses: softprops/action-gh-release@v1
+        if: success()
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
