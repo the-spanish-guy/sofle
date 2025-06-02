@@ -83,46 +83,10 @@ jobs:
       - name: Copy keyboard files to Vial-QMK
         run: |
           cp -r keyboards/sofle ${{ github.workspace }}/vial-qmk/keyboards/
-      - name: Create RP2040 keymap with extra features
-        run: |
-          cd ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps
-          cp -r vial vial-rp2040
-      - name: Configure RP2040 keymap for more memory
-        run: |
-          cd ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/vial-rp2040
-
-          # Backup original rules.mk
-          cp rules.mk rules.mk.backup
-
-          # Add RP2040 specific settings
-          cat >> rules.mk << 'EOF'
-
-          # RP2040 specific - more memory available
-          CONVERT_TO = rp2040_ce
-          EOF
-      - name: Configure RP2040 config.h for more features
-        run: |
-          cd ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/vial-rp2040
-
-          # Backup original config.h
-          cp config.h config.h.backup
-
-          # Add RP2040 specific config
-          cat >> config.h << 'EOF'
-
-          // More aggressive settings for RP2040
-          #define TAPPING_TERM 180
-          #define TAPPING_TERM_PER_KEY
-          #define PERMISSIVE_HOLD_PER_KEY
-          #define QUICK_TAP_TERM 0
-          EOF
-      - name: List RP2040 keymap
-        run: |
-          ls -la ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/
       - name: Compile UF2 firmware for RP2040
         run: |
           cd ${{ github.workspace }}/vial-qmk
-          make sofle:vial-rp2040
+          qmk compile -kb sofle/rev1 -km vial -e CONVERT_TO=promicro_rp2040
       - name: Check for UF2 file
         id: check_files
         run: |
