@@ -43,12 +43,21 @@ jobs:
         run: |
           cd ${{ github.workspace }}/vial-qmk
           make sofle:vial
+      - name: Check for HEX file
+        id: check_files
+        run: |
+          if [ -f "${{ github.workspace }}/vial-qmk/*.hex" ]; then
+            echo "hex_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "hex_exists=false" >> $GITHUB_OUTPUT
+          fi
       - name: Upload HEX firmware
-        uses: actions/upload-artifact@v3
-        if: success()
+        uses: actions/upload-artifact@v4
+        if: steps.check_files.outputs.hex_exists == 'true'
         with:
           name: sofle-vial-firmware-hex
           path: ${{ github.workspace }}/vial-qmk/*.hex
+          if-no-files-found: error
   build-uf2:
     runs-on: ubuntu-latest
     name: Build UF2 firmware (RP2040)
@@ -90,24 +99,6 @@ jobs:
 
           # RP2040 specific - more memory available
           CONVERT_TO = rp2040_ce
-          VIAL_INSECURE = yes
-
-          # Enable more features for RP2040
-          MOUSEKEY_ENABLE = yes
-          EXTRAKEY_ENABLE = yes
-          CONSOLE_ENABLE = yes
-          COMMAND_ENABLE = yes
-          NKRO_ENABLE = yes
-          AUDIO_ENABLE = no
-          UNICODE_ENABLE = yes
-          BACKLIGHT_ENABLE = no
-          RGBLIGHT_ENABLE = yes
-          RGB_MATRIX_ENABLE = no
-
-          # Vial features - more aggressive for RP2040
-          VIAL_TAP_DANCE_ENTRIES = 32
-          VIAL_COMBO_ENTRIES = 32
-          VIAL_KEY_OVERRIDE_ENTRIES = 32
           EOF
       - name: Configure RP2040 config.h for more features
         run: |
@@ -119,28 +110,11 @@ jobs:
           # Add RP2040 specific config
           cat >> config.h << 'EOF'
 
-          // RP2040 specific - more memory available
-          #undef VIAL_TAP_DANCE_ENTRIES
-          #define VIAL_TAP_DANCE_ENTRIES 32
-
-          #undef VIAL_COMBO_ENTRIES
-          #define VIAL_COMBO_ENTRIES 32
-
-          #undef VIAL_KEY_OVERRIDE_ENTRIES
-          #define VIAL_KEY_OVERRIDE_ENTRIES 32
-
           // More aggressive settings for RP2040
           #define TAPPING_TERM 180
           #define TAPPING_TERM_PER_KEY
           #define PERMISSIVE_HOLD_PER_KEY
           #define QUICK_TAP_TERM 0
-
-          // Unicode support
-          #define UNICODE_SELECTED_MODES UNICODE_MODE_LINUX
-
-          // More combos and sequences
-          #define COMBO_COUNT 16
-          #define COMBO_TERM 50
           EOF
       - name: List RP2040 keymap
         run: |
@@ -149,25 +123,34 @@ jobs:
         run: |
           cd ${{ github.workspace }}/vial-qmk
           make sofle:vial-rp2040
+      - name: Check for UF2 file
+        id: check_files
+        run: |
+          if [ -f "${{ github.workspace }}/vial-qmk/*.uf2" ]; then
+            echo "uf2_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "uf2_exists=false" >> $GITHUB_OUTPUT
+          fi
       - name: Upload UF2 firmware
-        uses: actions/upload-artifact@v3
-        if: success()
+        uses: actions/upload-artifact@v4
+        if: steps.check_files.outputs.uf2_exists == 'true'
         with:
           name: sofle-vial-firmware-uf2-rp2040
           path: ${{ github.workspace }}/vial-qmk/*.uf2
+          if-no-files-found: error
   create-release:
     runs-on: ubuntu-latest
     needs: [build-hex, build-uf2]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Download HEX artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: sofle-vial-firmware-hex
           path: ./hex-files
       - name: Download UF2 artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: sofle-vial-firmware-uf2-rp2040
