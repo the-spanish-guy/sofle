@@ -14,3 +14,11 @@ RGBLIGHT_ENABLE = yes
 TAP_DANCE_ENABLE = no
 BACKLIGHT_ENABLE = no
 WPM_ENABLE = yes
+
+# RP2040 specific settings
+ifeq ($(strip $(CONVERT_TO)), rp2040_ce)
+    VIAL_INSECURE = yes
+    VIAL_TAP_DANCE_ENTRIES = 32
+    VIAL_COMBO_ENTRIES = 32
+    VIAL_KEY_OVERRIDE_ENTRIES = 32
+endif
