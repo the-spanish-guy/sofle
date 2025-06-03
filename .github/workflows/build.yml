@@ -17,79 +17,33 @@ permissions:
   actions: read
 
 jobs:
-  build-hex:
-    runs-on: ubuntu-latest
-    name: Build HEX firmware
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-      - name: Install Vial-QMK CLI
-        run: |
-          python3 -m pip install qmk
-      - name: Clone Vial-QMK
-        run: |
-          git clone https://github.com/vial-kb/vial-qmk.git ${{ github.workspace }}/vial-qmk
-      - name: Setup Vial-QMK
-        run: |
-          cd ${{ github.workspace }}/vial-qmk
-          make git-submodule
-          util/qmk_install.sh
-      - name: Copy keyboard files to Vial-QMK
-        run: |
-          cp -r keyboards/sofle ${{ github.workspace }}/vial-qmk/keyboards/
-      - name: List available keymaps
-        run: |
-          ls -la ${{ github.workspace }}/vial-qmk/keyboards/sofle/keymaps/
-      - name: Compile HEX firmware
-        run: |
-          cd ${{ github.workspace }}/vial-qmk
-          make sofle:vial
-      - name: Check for HEX file
-        id: check_files
-        run: |
-          if [ -f "${{ github.workspace }}/vial-qmk/sofle_rev1_vial.hex" ]; then
-            echo "hex_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "hex_exists=false" >> $GITHUB_OUTPUT
-          fi
-      - name: Upload HEX firmware
-        uses: actions/upload-artifact@v4
-        if: steps.check_files.outputs.hex_exists == 'true'
-        with:
-          name: sofle-vial-firmware-hex
-          path: ${{ github.workspace }}/vial-qmk/sofle_rev1_vial.hex
-          if-no-files-found: error
   build-uf2:
     runs-on: ubuntu-latest
+    container: ghcr.io/qmk/qmk_cli
     name: Build UF2 firmware (RP2040)
     steps:
-      - name: Checkout repository
+      - name: Desabilita verificações de diretório git
+        run: git config --global --add safe.directory '*'
+
+      - name: Checkout QMK
         uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
-      - name: Install Vial-QMK CLI
+          repository: vial-kb/vial-qmk
+          submodules: recursive
+
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+        with:
+          path: temp_repo
+
+      - name: Copia arquivos do teclado
         run: |
-          python3 -m pip install qmk
-      - name: Clone Vial-QMK
+          echo "📁 Copiando arquivos do teclado..."
+          cp -r temp_repo/keyboards/sofle keyboards/
+          echo "✅ Arquivos copiados"
+
+      - name: Compila firmware
         run: |
-          git clone https://github.com/vial-kb/vial-qmk.git ${{ github.workspace }}/vial-qmk
-      - name: Setup Vial-QMK
-        run: |
-          cd ${{ github.workspace }}/vial-qmk
-          make git-submodule
-          util/qmk_install.sh
-      - name: Copy keyboard files to Vial-QMK
-        run: |
-          cp -r keyboards/sofle ${{ github.workspace }}/vial-qmk/keyboards/
-      - name: Compile UF2 firmware for RP2040
-        run: |
-          cd ${{ github.workspace }}/vial-qmk
           echo "🔍 Compilando firmware UF2..."
           make sofle/rev1:vial CONVERT_TO=promicro_rp2040
           echo "✅ Compilação concluída"
@@ -97,146 +51,79 @@ jobs:
           echo "📁 Conteúdo do diretório atual:"
           ls -la
           
-          echo "🔎 Procurando arquivos .uf2 recursivamente:"
+          echo "🔎 Procurando arquivos .uf2:"
           find . -name "*.uf2" -type f -exec realpath {} \;
-      - name: Check for UF2 file
+
+      - name: Verifica arquivo UF2
         id: check_files
         run: |
-          cd ${{ github.workspace }}/vial-qmk
           echo "🔍 Verificando arquivo UF2..."
           
-          # Procura o arquivo UF2 em vários locais possíveis
-          UF2_PATHS=(
-            "sofle_rev1_vial_promicro_rp2040.uf2"
-            ".build/sofle_rev1_vial_promicro_rp2040.uf2"
-          )
-          
-          UF2_FILE=""
-          for path in "${UF2_PATHS[@]}"; do
-            if [ -f "$path" ]; then
-              echo "✅ Arquivo encontrado em: $path"
-              UF2_FILE="$path"
-              break
-            fi
-          done
-          
-          if [ -n "$UF2_FILE" ]; then
+          UF2_FILE="sofle_rev1_vial_promicro_rp2040.uf2"
+          if [ -f "$UF2_FILE" ]; then
+            echo "✅ Arquivo encontrado"
             echo "📊 Detalhes do arquivo:"
             ls -lh "$UF2_FILE"
             echo "uf2_exists=true" >> $GITHUB_OUTPUT
-            echo "uf2_path=$UF2_FILE" >> $GITHUB_OUTPUT
           else
-            echo "❌ Arquivo UF2 não encontrado"
-            echo "📁 Conteúdo do diretório atual:"
+            echo "❌ Arquivo não encontrado"
+            echo "📁 Conteúdo do diretório:"
             ls -la
-            echo "📁 Conteúdo do diretório .build (se existir):"
+            echo "📁 Conteúdo do .build:"
             ls -la .build/ 2>/dev/null || echo "Diretório .build não existe"
             echo "uf2_exists=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-      - name: Upload UF2 firmware
+
+      - name: Upload firmware
         uses: actions/upload-artifact@v4
         if: steps.check_files.outputs.uf2_exists == 'true'
         with:
           name: sofle-vial-firmware-uf2-rp2040
-          path: ${{ github.workspace }}/vial-qmk/${{ steps.check_files.outputs.uf2_path }}
+          path: sofle_rev1_vial_promicro_rp2040.uf2
           if-no-files-found: error
+
   create-release:
     runs-on: ubuntu-latest
-    needs: [build-hex, build-uf2]
+    needs: [build-uf2]
     if: |
       github.ref == 'refs/heads/main' && 
-      github.event_name == 'push' && 
-      (success() || failure())
+      github.event_name == 'push'
     steps:
-      - name: Create release directories
-        run: |
-          mkdir -p ./firmware-files
-      - name: Download HEX artifact
-        uses: actions/download-artifact@v4
-        if: needs.build-hex.result == 'success'
-        continue-on-error: true
-        with:
-          name: sofle-vial-firmware-hex
-          path: ./firmware-files
       - name: Download UF2 artifact
         uses: actions/download-artifact@v4
-        if: needs.build-uf2.result == 'success'
-        continue-on-error: true
         with:
           name: sofle-vial-firmware-uf2-rp2040
           path: ./firmware-files
-      - name: List files for release
-        id: check_release_files
-        run: |
-          echo "📁 Verificando arquivos para release..."
-          
-          # Verifica se existem arquivos
-          FILE_COUNT=$(find ./firmware-files -type f | wc -l)
-          echo "📊 Quantidade de arquivos encontrados: $FILE_COUNT"
-          
-          if [ "$FILE_COUNT" -eq 0 ]; then
-            echo "❌ Nenhum arquivo encontrado para release"
-            echo "has_files=false" >> $GITHUB_OUTPUT
-            exit 1
-          else
-            echo "✅ Arquivos encontrados:"
-            ls -Rla ./firmware-files/
-            echo "has_files=true" >> $GITHUB_OUTPUT
-          fi
-      - name: Generate release notes
-        id: release_notes
-        run: |
-          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
-          echo "Firmware builds for Sofle V2.1" >> $GITHUB_ENV
-          echo "" >> $GITHUB_ENV
-          echo "## Status" >> $GITHUB_ENV
-          if [[ "${{ needs.build-hex.result }}" == "success" ]]; then
-            echo "✅ Pro Micro (.hex) build: Sucesso" >> $GITHUB_ENV
-          else
-            echo "❌ Pro Micro (.hex) build: Falhou" >> $GITHUB_ENV
-          fi
-          if [[ "${{ needs.build-uf2.result }}" == "success" ]]; then
-            echo "✅ RP2040 (.uf2) build: Sucesso" >> $GITHUB_ENV
-          else
-            echo "❌ RP2040 (.uf2) build: Falhou" >> $GITHUB_ENV
-          fi
-          echo "" >> $GITHUB_ENV
-          echo "## Files:" >> $GITHUB_ENV
-          if [[ "${{ needs.build-hex.result }}" == "success" ]]; then
-            echo "- \`*.hex\` - Para Pro Micro e controladores compatíveis" >> $GITHUB_ENV
-          fi
-          if [[ "${{ needs.build-uf2.result }}" == "success" ]]; then
-            echo "- \`*.uf2\` - Para controladores RP2040 (16MB, mais recursos habilitados)" >> $GITHUB_ENV
-          fi
-          echo "" >> $GITHUB_ENV
-          if [[ "${{ needs.build-uf2.result }}" == "success" ]]; then
-            echo "## Recursos da versão RP2040:" >> $GITHUB_ENV
-            echo "- Mais entradas Vial (32 tap dance, 32 combos, 32 key overrides)" >> $GITHUB_ENV
-            echo "- Suporte a Unicode habilitado" >> $GITHUB_ENV
-            echo "- Configuração de tapping aprimorada" >> $GITHUB_ENV
-            echo "- Suporte a console e comandos" >> $GITHUB_ENV
-            echo "- Todos os recursos padrão do Vial" >> $GITHUB_ENV
-          fi
-          echo "EOF" >> $GITHUB_ENV
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
-        if: |
-          (needs.build-hex.result == 'success' || 
-          needs.build-uf2.result == 'success') &&
-          steps.check_release_files.outputs.has_files == 'true'
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
-          body: ${{ env.RELEASE_BODY }}
-          files: |
-            ./firmware-files/*
-          generate_release_notes: false
+          body: |
+            ## 🎹 Firmware Sofle V2.1
+            
+            Build automática dos firmwares para o teclado Sofle.
+            
+            ### ⚡ Status
+            ✅ Build concluída com sucesso
+            
+            ### 📦 Arquivos
+            - `*.uf2` - Para controladores RP2040 (16MB)
+            
+            ### ✨ Recursos
+            - Suporte ao Vial
+            - 32 tap dance
+            - 32 combos
+            - 32 key overrides
+            - Suporte a Unicode
+            - Configuração de tapping aprimorada
+            - Suporte a console e comandos
+          files: ./firmware-files/*
           draft: false
           prerelease: false
-          # Não gera arquivos fonte automaticamente
           make_latest: true
           skip_sourcemap: true
-          omit_body: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
