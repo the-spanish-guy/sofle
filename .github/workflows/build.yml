@@ -45,7 +45,7 @@ jobs:
       - name: Compila firmware
         run: |
           echo "🔍 Compilando firmware UF2..."
-          make sofle/rev1:vial CONVERT_TO=promicro_rp2040
+          make sofle/rev1:vial -km rgb_default CONVERT_TO=promicro_rp2040
           echo "✅ Compilação concluída"
           
           echo "📁 Conteúdo do diretório atual:"
